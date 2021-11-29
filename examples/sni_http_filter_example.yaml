@@ -1,0 +1,116 @@
+admin:
+  address:
+    socket_address:
+      protocol: TCP
+      address: 0.0.0.0
+      port_value: 9090
+
+static_resources:
+
+  listeners:
+
+  - name: listener_8433
+
+    address:
+      socket_address:
+        address: 0.0.0.0
+        port_value: 8443
+
+    listener_filters:
+      - name: envoy.filters.listener.tls_inspector
+
+    filter_chains:
+      - filters:
+          - name: envoy.filters.network.sni_filter
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.common.firewall.v3alpha.FirewallProto
+              rules:
+              - name: rule1
+                action: ALLOW
+                priority: 2
+                matches:
+                - name: match_dot_net_com
+                  destination_fqdns: [ "*.net", "*.com" ]
+              - name: r2
+                action: DENY
+                priority: 1
+                matches:
+                - name: match_microsoft_com
+                  destination_fqdns: [ "*microsoft.com" ]
+
+          - name: envoy.filters.network.sni_dynamic_forward_proxy
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.network.sni_dynamic_forward_proxy.v3.FilterConfig
+              port_value: 443
+              dns_cache_config:
+                name: dynamic_forward_proxy_cache_config
+                dns_lookup_family: V4_ONLY
+
+          - name: envoy.tcp_proxy
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.network.tcp_proxy.v3.TcpProxy
+              stat_prefix: tcp
+              cluster: dynamic_forward_proxy_cluster
+
+  - name: listener_8080
+
+    address:
+      socket_address:
+        address: 0.0.0.0
+        port_value: 8080
+
+    filter_chains:
+    - filters:
+      - name: envoy.filters.network.http_connection_manager
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+          stat_prefix: ingress_http
+
+          route_config:
+            name: local_route
+            virtual_hosts:
+            - name: local_service
+              domains: ["*"]
+              routes:
+              - match:
+                  prefix: "/"
+                route:
+                  cluster: dynamic_forward_proxy_cluster
+
+          http_filters:
+          - name: envoy.filters.http.url_filter
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.common.firewall.v3alpha.FirewallProto
+              rules:
+              - name: rule1
+                action: ALLOW
+                priority: 2
+                matches:
+                - name: match_dot_net_com
+                  destination_fqdns: [ "*.net", "*.com" ]
+              - name: r2
+                action: DENY
+                priority: 1
+                matches:
+                - name: match_microsoft_com
+                  destination_fqdns: [ "*microsoft.com" ]
+
+          - name: envoy.filters.http.dynamic_forward_proxy
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.dynamic_forward_proxy.v3.FilterConfig
+              dns_cache_config:
+                name: dynamic_forward_proxy_cache_config
+                dns_lookup_family: V4_ONLY
+          - name: envoy.filters.http.router
+
+  clusters:
+  - name: dynamic_forward_proxy_cluster
+    connect_timeout: 1s
+    lb_policy: CLUSTER_PROVIDED
+    cluster_type:
+      name: envoy.clusters.dynamic_forward_proxy
+      typed_config:
+        "@type": type.googleapis.com/envoy.extensions.clusters.dynamic_forward_proxy.v3.ClusterConfig
+        dns_cache_config:
+          name: dynamic_forward_proxy_cache_config
+          dns_lookup_family: V4_ONLY

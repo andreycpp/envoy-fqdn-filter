@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package envoy.extensions.filters.common.firewall.v3alpha;
+
+import "envoy/config/core/v3/address.proto";
+
+import "udpa/annotations/status.proto";
+import "validate/validate.proto";
+
+option java_package = "io.envoyproxy.envoy.extensions.filters.common.firewall.v3alpha";
+option java_outer_classname = "FirewallProto";
+option java_multiple_files = true;
+option (udpa.annotations.file_status).package_version_status = ACTIVE;
+
+// [#protodoc-title: Firewall config]
+
+message MatchSet {
+  string name = 1 [(validate.rules).string = {min_len: 1}];
+  repeated string destination_fqdns = 2 [(validate.rules).repeated = {items: {string: {min_len: 1}}}];
+}
+
+message Rule {
+  enum Action {
+    DENY = 0;
+    ALLOW = 1;
+  }
+  string name = 1 [(validate.rules).string = {min_len: 1}];
+
+  Action action = 2 [(validate.rules).enum = {defined_only: true}];
+
+  uint32 priority = 3 [(validate.rules).uint32 = {gte: 1}];
+
+  repeated MatchSet matches = 4 [(validate.rules).repeated = {min_items: 1}];
+}
+
+message FirewallProto {
+  repeated Rule rules = 1 [(validate.rules).repeated = {min_items: 1}];
+}
